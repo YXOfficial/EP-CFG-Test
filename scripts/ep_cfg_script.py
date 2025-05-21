@@ -9,7 +9,7 @@ from typing import Any
 
 # Import the patching class from the CFGZERO directory within the extension
 try:
-    from CFGZERO.nodes_ep_cfg import EP_CFG_Node
+    from EPCFG.nodes_ep_cfg import EP_CFG_Node
 except ImportError:
     # Fallback for local testing or different setups where direct import might fail
     # This ensures the script can find the node definition if the extension's
@@ -18,7 +18,7 @@ except ImportError:
     script_dir = os.path.dirname(__file__)
     parent_dir = os.path.abspath(os.path.join(script_dir, os.pardir))
     sys.path.append(parent_dir)
-    from CFGZERO.nodes_ep_cfg import EP_CFG_Node
+    from EPCFG.nodes_ep_cfg import EP_CFG_Node
     logging.warning("EP-CFG: Added parent directory to sys.path for module import.")
 
 
