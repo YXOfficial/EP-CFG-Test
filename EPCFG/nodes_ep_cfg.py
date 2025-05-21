@@ -1,4 +1,4 @@
-# --- START OF FILE nodes_ep_cfg.py ---
+# --- START OF FILE nodes_ep_cfg.py (CORRECTED) ---
 import torch
 import logging
 
@@ -52,8 +52,8 @@ class EP_CFG_Node:
         mask = (tensor_flat >= lower_bounds) & (tensor_flat <= upper_bounds)
 
         # Apply mask, square the contributing values, and sum them up.
-        # Multiplying by mask.float() zeros out values outside the range before squaring.
-        robust_squared_values = (tensor_flat * mask.float()) ** 2
+        # This correctly implements sum(x_i^2 * 1[...])
+        robust_squared_values = (tensor_flat ** 2) * mask.float()
         energies = torch.sum(robust_squared_values, dim=1, keepdim=True) # Sum over flattened dimensions
 
         return energies
@@ -88,30 +88,31 @@ class EP_CFG_Node:
             uncond_denoised = args['uncond_denoised'] # Corresponds to xu in the paper
             # args also contains 'sigma' (current noise level) and 'x' (current latent)
 
+            # Make a mutable copy of uncond_denoised for potential modification
+            _uncond_denoised_for_cfg = uncond_denoised
+            
             # --- Zero Init First Step Logic ---
-            # This applies before EP-CFG calculation.
+            # This modifies the unconditional prediction for the first step.
             if zero_init_first_step:
                 current_sigma_val = args['sigma'][0].item() # Get scalar value of current sigma
                 # Compare with a small tolerance due to potential float precision issues
                 if abs(current_sigma_val - initial_sigma) < 1e-5:
                     logging.debug(f"EP-CFG: Applying zero_init for first step (sigma: {current_sigma_val})")
-                    # Return a tensor of zeros with the correct shape for the unconditional prediction
-                    # This effectively makes the first step's unconditional guidance zero.
-                    return torch.zeros_like(cond_denoised)
+                    # Set the unconditional prediction to zeros for this step's CFG calculation
+                    _uncond_denoised_for_cfg = torch.zeros_like(uncond_denoised)
 
             # Ensure original_shape and batch_size are correctly derived
             original_shape = cond_denoised.shape
             if len(original_shape) < 2: # Expected shape is at least (B, C, ...)
                 logging.error("EP-CFG: Unexpected tensor shape for denoised latents. Falling back to standard CFG.")
                 # Fallback to standard CFG if the input shape is problematic
-                return uncond_denoised + cond_scale * (cond_denoised - uncond_denoised)
+                return _uncond_denoised_for_cfg + cond_scale * (cond_denoised - _uncond_denoised_for_cfg)
 
             batch_size = original_shape[0]
 
             # --- Step 1: Calculate Xcfg_original (standard CFG output) ---
-            # As per paper Eq. 1: Xcfg = X + (x – 1)(xc – xu), where X=xu, x=cond_scale
-            # This is equivalent to the standard CFG formula:
-            Xcfg_original = uncond_denoised + cond_scale * (cond_denoised - uncond_denoised)
+            # Use the potentially modified _uncond_denoised_for_cfg here
+            Xcfg_original = _uncond_denoised_for_cfg + cond_scale * (cond_denoised - _uncond_denoised_for_cfg)
 
             # --- Step 2: Calculate Ec = ||xc||^2 (robustly) ---
             Ec = self.calculate_robust_energy(cond_denoised, l_percentile, h_percentile)
@@ -146,4 +147,4 @@ NODE_DISPLAY_NAME_MAPPINGS = {
     "EP_CFG_Node": "YX-EP-CFG Guidance Patcher"
 }
 
-# --- END OF FILE nodes_ep_cfg.py ---
+# --- END OF FILE nodes_ep_cfg.py (CORRECTED) ---
